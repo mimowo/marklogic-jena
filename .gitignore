@@ -13,7 +13,6 @@
 # exclude .gradle working directory
 .gradle
 
-build
 
 buildSrc/build
 .classpath
