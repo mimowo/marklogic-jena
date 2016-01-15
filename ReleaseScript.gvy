@@ -40,7 +40,7 @@ def mvn(args) {
 }
 
 def gradle(args) {
-  runCommand("sh gradle" + " " + args)
+  runCommand("gradle" + " " + args)
 }
 
 def verifyTagDoesntExist() {
