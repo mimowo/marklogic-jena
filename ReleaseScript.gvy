@@ -40,7 +40,18 @@ def mvn(args) {
 }
 
 def gradle(args) {
-  runCommand("gradle" + " " + args)
+  runCommand("sh gradle" + " " + args)
+}
+
+def deleteLocalReleaseBranchIfNeeded() {
+  try {
+    git('rev-parse --verify ' + releaseBranch)
+  } catch (all) {
+    println "[INFO] Local branch " + releaseBranch + " does not exist, continue."
+    return null
+  }
+  println "[INFO] Local branch " + releaseBranch + " exits, removing."
+  git('branch -D ' + releaseBranch)
 }
 
 def verifyTagDoesntExist() {
@@ -54,42 +65,69 @@ def verifyTagDoesntExist() {
   throw new RuntimeException("Tag " + releaseTag + " already exists!")
 }
 
-def beforeBuildSetUpSourceBranch() {
-  git('checkout ' + releaseFromBranch)
+def createReleaseBranch() {
+  if (releaseFromBranch != "master") {
+    git('checkout ' + releaseFromBranch)
+  }
+  git('branch ' + releaseBranch)
   git('pull origin ' + releaseFromBranch)
-  git('branch ' + releaseBranch)  
 }
 
-def beforeBuildSetUpTargetBranch() {
+def commitAndCheckoutReleaseBranch() {
   git('add .')
   runCommand(["git", "commit", "-m", "version updated to " + developmentVersion])
   git('checkout ' + releaseBranch)
 }
 
-def beforeBuildSetUpTargetBranchCommit() {
-  git('add .') 
+def commitReleaseBranch() {
+  git('add .')
   runCommand(["git", "commit", "-m", "version updated to " + releaseVersion])
 }
 
 def action = this.args[0]
 
+
+if(action == 'create-release-branch') {
+  deleteLocalReleaseBranchIfNeeded()
+  createReleaseBranch();
+}
+
+if(action == 'verify-and-create-release-branch') {
+  verifyTagDoesntExist()
+
+  deleteLocalReleaseBranchIfNeeded()
+  createReleaseBranch();
+}
+
+if(action == 'commit-current-and-checkout-release-branch') {
+  commitAndCheckoutReleaseBranch();
+}
+
+if(action == 'commit-release-branch') {
+  commitReleaseBranch();
+}
+
 if(action == 'before-maven-build') {
   verifyTagDoesntExist()
 
-  beforeBuildSetUpSourceBranch();
+  createReleaseBranch();
   mvn('versions:set -DnewVersion=' + developmentVersion + '-DgenerateBackupPoms=false')
-  beforeBuildSetUpTargetBranch()
+  commitAndCheckoutReleaseBranch()
   mvn('versions:set -DnewVersion=' + releaseVersion + '-DgenerateBackupPoms=false')
-  beforeBuildSetUpTargetBranchCommit()
-} else if (action =='before-gradle-build') {
+  commitReleaseBranch()
+}
+
+if (action =='before-gradle-build') {
   verifyTagDoesntExist()
 
-  beforeBuildSetUpSourceBranch();
+  createReleaseBranch();
   gradle('setVersion -PnewVersion=' + developmentVersion)
-  beforeBuildSetUpTargetBranch()
+  commitAndCheckoutReleaseBranch()
   gradle('setVersion -PnewVersion=' + releaseVersion)
-  beforeBuildSetUpTargetBranchCommit()
-} else if (action == 'after-build-success') {
+  commitReleaseBranch()
+}
+
+if (action == 'after-build-success') {
   git("tag " + releaseTag + " " +releaseBranch)
   git('push origin ' + releaseFromBranch + ':' + releaseFromBranch)
   git('push origin ' + releaseBranch + ':' + releaseBranch + ' --tags')
